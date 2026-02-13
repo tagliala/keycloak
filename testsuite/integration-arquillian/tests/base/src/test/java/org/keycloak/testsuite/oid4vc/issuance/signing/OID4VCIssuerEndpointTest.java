@@ -50,6 +50,7 @@ import jakarta.ws.rs.core.UriBuilder;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.OID4VCConstants.KeyAttestationResistanceLevels;
 import org.keycloak.TokenVerifier;
+import org.keycloak.VCFormat;
 import org.keycloak.admin.client.resource.ClientResource;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.admin.client.resource.UserResource;
@@ -73,7 +74,6 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.UserSessionModel;
 import org.keycloak.models.oid4vci.CredentialScopeModel;
 import org.keycloak.protocol.oid4vc.issuance.JWTVCIssuerWellKnownProviderFactory;
-import org.keycloak.protocol.oid4vc.issuance.OID4VCAuthorizationDetailResponse;
 import org.keycloak.protocol.oid4vc.issuance.OID4VCIssuerEndpoint;
 import org.keycloak.protocol.oid4vc.issuance.TimeProvider;
 import org.keycloak.protocol.oid4vc.issuance.credentialbuilder.CredentialBuilder;
@@ -83,7 +83,7 @@ import org.keycloak.protocol.oid4vc.model.CredentialIssuer;
 import org.keycloak.protocol.oid4vc.model.CredentialRequest;
 import org.keycloak.protocol.oid4vc.model.CredentialResponse;
 import org.keycloak.protocol.oid4vc.model.DisplayObject;
-import org.keycloak.protocol.oid4vc.model.Format;
+import org.keycloak.protocol.oid4vc.model.OID4VCAuthorizationDetail;
 import org.keycloak.protocol.oid4vc.model.SupportedCredentialConfiguration;
 import org.keycloak.protocol.oid4vc.model.VerifiableCredential;
 import org.keycloak.protocol.oidc.representations.OIDCConfigurationRepresentation;
@@ -107,7 +107,6 @@ import org.keycloak.testsuite.runonserver.RunOnServerException;
 import org.keycloak.testsuite.util.AdminClientUtil;
 import org.keycloak.testsuite.util.oauth.OpenIDProviderConfigurationResponse;
 import org.keycloak.testsuite.util.oauth.oid4vc.CredentialIssuerMetadataResponse;
-import org.keycloak.testsuite.util.oauth.oid4vc.Oid4vcCredentialResponse;
 import org.keycloak.userprofile.DeclarativeUserProfileProviderFactory;
 import org.keycloak.userprofile.config.UPConfigUtils;
 import org.keycloak.util.JsonSerialization;
@@ -234,39 +233,33 @@ public abstract class OID4VCIssuerEndpointTest extends OID4VCTest {
 
         // Register the optional client scopes
         sdJwtTypeCredentialClientScope = registerOptionalClientScope(sdJwtTypeCredentialScopeName,
-                                                                     null,
-                                                                     sdJwtTypeCredentialConfigurationIdName,
-                                                                     sdJwtTypeCredentialScopeName,
-                                                                     sdJwtCredentialVct,
-                                                                     Format.SD_JWT_VC,
-                                                                     null,
-                                                                     List.of(KeyAttestationResistanceLevels.HIGH,
-                                                                             KeyAttestationResistanceLevels.MODERATE));
+                null,
+                sdJwtTypeCredentialConfigurationIdName,
+                sdJwtTypeCredentialScopeName,
+                sdJwtCredentialVct,
+                VCFormat.SD_JWT_VC,
+                null,
+                List.of(KeyAttestationResistanceLevels.HIGH, KeyAttestationResistanceLevels.MODERATE));
         jwtTypeCredentialClientScope = registerOptionalClientScope(jwtTypeCredentialScopeName,
-                                                                   TEST_DID.toString(),
-                                                                   jwtTypeCredentialConfigurationIdName,
-                                                                   jwtTypeCredentialScopeName,
-                                                                   null,
-                                                                   Format.JWT_VC,
-                                                                   TEST_CREDENTIAL_MAPPERS_FILE,
-                                                                   Collections.emptyList());
+                TEST_DID.toString(),
+                jwtTypeCredentialConfigurationIdName,
+                jwtTypeCredentialScopeName,
+                null,
+                VCFormat.JWT_VC,
+                TEST_CREDENTIAL_MAPPERS_FILE,
+                Collections.emptyList());
         minimalJwtTypeCredentialClientScope = registerOptionalClientScope("vc-with-minimal-config",
-                                                                          null,
-                                                                          null,
-                                                                          null,
-                                                                          null,
-                                                                          null,
-                                                                          null, null);
+                null,
+                null,
+                null,
+                null,
+                null,
+                null, null);
 
         List.of(client, namedClient).forEach(client -> {
             String clientId = client.getClientId();
 
             // Assign the registered optional client scopes to the client
-            assignOptionalClientScopeToClient(sdJwtTypeNaturalPersonClientScope.getId(), clientId);
-            assignOptionalClientScopeToClient(sdJwtTypeCredentialClientScope.getId(), clientId);
-            assignOptionalClientScopeToClient(jwtTypeCredentialClientScope.getId(), clientId);
-            assignOptionalClientScopeToClient(minimalJwtTypeCredentialClientScope.getId(), clientId);
-
             assignOptionalClientScopeToClient(sdJwtTypeNaturalPersonClientScope.getId(), clientId);
             assignOptionalClientScopeToClient(sdJwtTypeCredentialClientScope.getId(), clientId);
             assignOptionalClientScopeToClient(jwtTypeCredentialClientScope.getId(), clientId);
@@ -530,9 +523,9 @@ public abstract class OID4VCIssuerEndpointTest extends OID4VCTest {
                 JsonWebToken jwt = new JWSInput(token).readJsonContent(JsonWebToken.class);
                 Object authDetails = jwt.getOtherClaims().get(OAuth2Constants.AUTHORIZATION_DETAILS);
                 if (authDetails != null) {
-                    List<OID4VCAuthorizationDetailResponse> authDetailsResponse = JsonSerialization.readValue(
+                    List<OID4VCAuthorizationDetail> authDetailsResponse = JsonSerialization.readValue(
                             JsonSerialization.writeValueAsString(authDetails),
-                            new TypeReference<List<OID4VCAuthorizationDetailResponse>>() {
+                            new TypeReference<List<OID4VCAuthorizationDetail>>() {
                             }
                     );
                     if (!authDetailsResponse.isEmpty() &&
@@ -613,46 +606,8 @@ public abstract class OID4VCIssuerEndpointTest extends OID4VCTest {
         return contextRoot + "/auth/realms/" + realm + "/.well-known/" + JWTVCIssuerWellKnownProviderFactory.PROVIDER_ID;
     }
 
-    protected String getCredentialOfferUriUrl(String configId) {
-        return getCredentialOfferUriUrl(configId, true, "john");
-    }
-
-    protected String getCredentialOfferUriUrl(String configId, boolean preAuthorized, String targetUser) {
-        return getCredentialOfferUriUrl(configId, preAuthorized, targetUser, null);
-    }
-
-    protected String getCredentialOfferUriUrl(String configId, Boolean preAuthorized, String appUsername, String appClientId) {
-        String res = getBasePath("test") + "credential-offer-uri?credential_configuration_id=" + configId;
-        if (preAuthorized != null)
-            res += "&pre_authorized=" + preAuthorized;
-        if (appClientId != null)
-            res += "&client_id=" + appClientId;
-        if (appUsername != null)
-            res += "&username=" + appUsername;
-        return res;
-    }
-
     protected String getCredentialOfferUrl(String nonce) {
         return getBasePath("test") + "credential-offer/" + nonce;
-    }
-
-    protected void requestCredential(String token,
-                                     String credentialEndpoint,
-                                     SupportedCredentialConfiguration offeredCredential,
-                                     CredentialResponseHandler responseHandler,
-                                     ClientScopeRepresentation expectedClientScope) throws IOException, VerificationException {
-        Oid4vcCredentialResponse credentialRequestResponse = oauth.oid4vc()
-                .credentialRequest()
-                .endpoint(credentialEndpoint)
-                .bearerToken(token)
-                .credentialConfigurationId(offeredCredential.getId())
-                .send();
-
-        assertEquals(HttpStatus.SC_OK, credentialRequestResponse.getStatusCode());
-        CredentialResponse credentialResponse = credentialRequestResponse.getCredentialResponse();
-
-        // Use response handler to customize checks based on formats.
-        responseHandler.handleCredentialResponse(credentialResponse, expectedClientScope);
     }
 
     protected void requestCredentialWithIdentifier(String token,
@@ -835,14 +790,14 @@ public abstract class OID4VCIssuerEndpointTest extends OID4VCTest {
         }
     }
 
-    protected List<OID4VCAuthorizationDetailResponse> parseAuthorizationDetails(String responseBody) throws IOException {
+    protected List<OID4VCAuthorizationDetail> parseAuthorizationDetails(String responseBody) throws IOException {
         Map<String, Object> responseMap = JsonSerialization.readValue(responseBody, new TypeReference<Map<String, Object>>() {
         });
         Object authDetailsObj = responseMap.get("authorization_details");
         assertNotNull("authorization_details should be present in the response", authDetailsObj);
         return JsonSerialization.readValue(
                 JsonSerialization.writeValueAsString(authDetailsObj),
-                new TypeReference<List<OID4VCAuthorizationDetailResponse>>() {
+                new TypeReference<List<OID4VCAuthorizationDetail>>() {
                 }
         );
     }
